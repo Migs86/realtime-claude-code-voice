@@ -93,6 +93,7 @@ self-interrupt. Fixes, best first:
 | `REALTIME_VOICE_BARGE_IN` | `1` | `0` = mic muted during playback. |
 | `REALTIME_VOICE_SILENCE_MS` | `600` | Trailing silence that ends your turn. Lower = snappier, but can clip mid-sentence pauses. |
 | `REALTIME_VOICE_IDLE_S` | `300` | Close the kept-alive connection after this much idle time. |
+| `REALTIME_VOICE_FOCUS` | `1` | Focus the talking session's iTerm2 tab at the start of every voice turn. `0` = only on slot hand-offs. |
 | `REALTIME_VOICE_LOG` | `INFO` | Log level (stderr). |
 
 ## Cost

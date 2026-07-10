@@ -171,6 +171,10 @@ async def converse(
                 "this session waited for the voice slot; the user's iTerm2 tab "
                 "was focused and the hand-off was announced out loud"
             )
+        elif config.FOCUS:
+            # Switch iTerm2 to the tab that's about to talk. Fire-and-forget
+            # so the osascript round-trip never delays the first audio.
+            asyncio.create_task(focus_terminal())
         async with _session_lock:
             _cancel_idle_close()
             session = await _get_session(voice or config.VOICE)

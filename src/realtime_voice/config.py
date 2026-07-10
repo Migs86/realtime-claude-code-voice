@@ -53,6 +53,10 @@ BARGE_IN = _flag("REALTIME_VOICE_BARGE_IN", True)
 # can clip natural mid-sentence pauses; raise it if it cuts you off.
 SILENCE_MS = int(os.environ.get("REALTIME_VOICE_SILENCE_MS", "600"))
 
+# Bring this session's iTerm2 tab to the front whenever it starts a voice
+# turn, so you always see the terminal that's talking/listening.
+FOCUS = _flag("REALTIME_VOICE_FOCUS", True)
+
 # Close the kept-alive Realtime connection and audio devices after this many
 # seconds without a converse call. Idle time costs nothing (the API bills per
 # audio token), but OpenAI caps session length, so don't hold it forever.
