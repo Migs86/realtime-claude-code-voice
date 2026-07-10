@@ -61,6 +61,23 @@ Code session, type `/voice` (optionally `/voice <topic>`) — or just say
   tells Claude another session is waiting so it can wrap up.
 - `voice_status` shows the holder, the queue, and config.
 
+## Push-to-talk hotkey (global)
+
+`scripts/voice-hotkey.sh` focuses your **last-active iTerm2 window** and
+types a voice request into the Claude Code session there, then submits it.
+Claude Code queues messages that arrive mid-task, so this works even while
+Claude is busy — voice starts at the next opportunity.
+
+Bind it to a key combo with the macOS Shortcuts app:
+
+1. Shortcuts → **+** → add a **Run Shell Script** action.
+2. Script: `/path/to/realtime-claude-code-voice/scripts/voice-hotkey.sh`
+3. In the shortcut's **Details** pane → **Add Keyboard Shortcut** → press
+   your combo (e.g. ⌃⌥V).
+
+Now that combo works from any app, hands-free into the last terminal you
+used. Pass an argument to send a different message.
+
 ## Status line indicator
 
 During a voice turn the server writes the live phase to
