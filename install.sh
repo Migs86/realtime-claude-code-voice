@@ -16,6 +16,10 @@ echo "==> Registering MCP server with Claude Code (scope: user)"
 claude mcp remove --scope user realtime-voice >/dev/null 2>&1 || true
 claude mcp add --scope user realtime-voice -- uv run --directory "$PWD" realtime-voice-mcp
 
+echo "==> Installing /voice slash command (user scope)"
+mkdir -p "$HOME/.claude/commands"
+cp commands/voice.md "$HOME/.claude/commands/voice.md"
+
 echo
 echo "Done. Checklist:"
 echo "  1. OPENAI_API_KEY must be set in the shell that launches claude,"

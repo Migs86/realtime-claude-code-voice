@@ -36,7 +36,9 @@ Smoke test without Claude:
 uv run python scripts/voice_check.py "Hello! Say something back."
 ```
 
-Then in any Claude Code session: *"talk to me using realtime voice"*.
+That also installs a `/voice` slash command user-wide. Then in any Claude
+Code session, type `/voice` (optionally `/voice <topic>`) — or just say
+*"talk to me using realtime voice"*.
 
 ## macOS permissions (one-time prompts)
 
