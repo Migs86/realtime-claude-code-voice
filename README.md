@@ -61,6 +61,16 @@ Code session, type `/voice` (optionally `/voice <topic>`) — or just say
   tells Claude another session is waiting so it can wrap up.
 - `voice_status` shows the holder, the queue, and config.
 
+## Status line indicator
+
+During a voice turn the server writes the live phase to
+`~/.realtime-voice/phase.json` (`{pid, label, phase, since}`), so a Claude
+Code statusline can show **who is talking and whether it's speaking or
+listening** — e.g. `🎙 listening (this tab)` or `🔊 speaking · other-project`.
+`scripts/statusline-voice-segment.sh` prints that segment; call it from your
+statusline script and append its output (it prints nothing when voice is
+idle, and a stale file from a dead process is ignored via a pid check).
+
 ## Barge-in and echo
 
 Barge-in keeps the mic hot while audio plays. There is **no echo

@@ -174,8 +174,12 @@ class RealtimeSession:
         barge_in: bool = True,
         listen_timeout: float = 60.0,
         utterance_timeout: float = 120.0,
+        on_phase=None,
     ) -> dict:
         """Speak `message`, optionally listen for a reply.
+
+        on_phase, if given, is called with "speaking" / "listening" as the
+        turn moves through its phases (used for status-line indicators).
 
         Returns {"status": "ok"|"silence"|"no-transcript",
                  "transcript": str|None, "barged_in": bool}.
@@ -195,6 +199,8 @@ class RealtimeSession:
                 # Hot mic during playback only when barge-in is wanted.
                 self.audio.set_mic(bool(listen and barge_in))
                 st.speaking = True
+                if on_phase:
+                    on_phase("speaking")
                 await self._send({
                     "type": "response.create",
                     "response": {
@@ -212,6 +218,8 @@ class RealtimeSession:
             if not listen:
                 return {"status": "ok", "transcript": None, "barged_in": barged}
 
+            if on_phase:
+                on_phase("listening")
             self.audio.set_mic(True)
             if not st.speech_started.is_set():
                 if not await _wait(st, st.speech_started, listen_timeout):

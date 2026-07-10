@@ -21,7 +21,15 @@ from . import config
 from .audio import AudioIO
 from .iterm import focus_terminal, iterm_session_uuid, notify
 from .realtime import RealtimeError, RealtimeSession
-from .slot import AudioSlot, SlotBusy, holder_info, waiter_infos
+from .slot import (
+    AudioSlot,
+    SlotBusy,
+    clear_phase,
+    holder_info,
+    phase_info,
+    waiter_infos,
+    write_phase,
+)
 
 logging.basicConfig(
     level=os.environ.get("REALTIME_VOICE_LOG", "INFO"),
@@ -166,30 +174,28 @@ async def converse(
         async with _session_lock:
             _cancel_idle_close()
             session = await _get_session(voice or config.VOICE)
+            turn_kwargs = dict(
+                message=text,
+                listen=listen,
+                barge_in=effective_barge_in,
+                listen_timeout=listen_timeout,
+                on_phase=lambda phase: write_phase(PROJECT, phase),
+            )
             try:
-                result = await session.run_turn(
-                    message=text,
-                    listen=listen,
-                    barge_in=effective_barge_in,
-                    listen_timeout=listen_timeout,
-                )
+                result = await session.run_turn(**turn_kwargs)
             except RealtimeError:
                 # The kept-alive WebSocket may have died while idle;
                 # reconnect once and retry the turn.
                 log.info("realtime turn failed — reconnecting once")
                 await session.close()
-                result = await session.run_turn(
-                    message=text,
-                    listen=listen,
-                    barge_in=effective_barge_in,
-                    listen_timeout=listen_timeout,
-                )
+                result = await session.run_turn(**turn_kwargs)
     except RealtimeError as e:
         return f"[error] Realtime API: {e}"
     except Exception as e:
         log.exception("converse failed")
         return f"[error] {type(e).__name__}: {e}"
     finally:
+        clear_phase()
         still_waiting = slot.release()
         if still_waiting:
             # Hand off cleanly: free the mic/speakers for the next session.
@@ -236,6 +242,9 @@ async def voice_status() -> str:
         lines.append(f"audio slot: held by {who} for {held_for}s")
     else:
         lines.append("audio slot: free")
+    phase = phase_info()
+    if phase:
+        lines.append(f"voice activity: {phase.get('phase')} ('{phase.get('label')}')")
     waiters = waiter_infos()
     if waiters:
         lines.append(

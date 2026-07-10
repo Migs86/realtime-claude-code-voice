@@ -18,6 +18,7 @@ from .config import STATE_DIR
 LOCK_FILE = STATE_DIR / "audio.lock"
 CURRENT_FILE = STATE_DIR / "current.json"
 WAITERS_DIR = STATE_DIR / "waiters"
+PHASE_FILE = STATE_DIR / "phase.json"
 
 
 class SlotBusy(Exception):
@@ -59,6 +60,41 @@ def waiter_infos(exclude_pid: int | None = None) -> list[dict]:
             continue
         out.append(info)
     return sorted(out, key=lambda i: i.get("since", 0))
+
+
+def write_phase(label: str, phase: str) -> None:
+    """Advertise what the slot holder is doing (\"speaking\"/\"listening\") so
+    status lines can show a live voice indicator."""
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = PHASE_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps({
+            "pid": os.getpid(),
+            "label": label,
+            "phase": phase,
+            "since": time.time(),
+        }))
+        tmp.replace(PHASE_FILE)
+    except OSError:
+        pass
+
+
+def clear_phase() -> None:
+    """Remove the phase file, but only if this process wrote it."""
+    try:
+        info = json.loads(PHASE_FILE.read_text())
+    except (OSError, ValueError):
+        return
+    if info.get("pid") == os.getpid():
+        PHASE_FILE.unlink(missing_ok=True)
+
+
+def phase_info() -> dict | None:
+    try:
+        info = json.loads(PHASE_FILE.read_text())
+    except (OSError, ValueError):
+        return None
+    return info if _pid_alive(info.get("pid", -1)) else None
 
 
 class AudioSlot:
