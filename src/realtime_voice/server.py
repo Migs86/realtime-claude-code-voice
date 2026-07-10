@@ -18,7 +18,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from . import config
-from .audio import AudioIO
+from .audio import AudioIO, open_audio
 from .iterm import focus_terminal, iterm_session_uuid, notify
 from .realtime import RealtimeError, RealtimeSession
 from .slot import (
@@ -58,7 +58,9 @@ async def _get_session(voice: str) -> RealtimeSession:
     """Return the live session, (re)creating it if absent or misconfigured."""
     global _audio, _session
     if _audio is None:
-        _audio = AudioIO(asyncio.get_running_loop()).__enter__()
+        _audio = open_audio(asyncio.get_running_loop())
+        if _session is not None:
+            _session.audio = _audio
     if _session is not None and not _session.matches(
         voice=voice, model=config.MODEL, silence_ms=config.SILENCE_MS
     ):

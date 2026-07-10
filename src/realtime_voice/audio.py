@@ -19,6 +19,23 @@ BLOCK_FRAMES = 480  # 20 ms per block — tight mic->VAD and playback latency
 BYTES_PER_FRAME = 2  # int16 mono
 
 
+def open_audio(loop: asyncio.AbstractEventLoop) -> "AudioIO":
+    """Create and start an AudioIO, surviving audio-device changes.
+
+    PortAudio snapshots the device list at init; if devices changed since
+    (e.g. AirPods connected after this process started), opening a stream
+    fails with an internal error until PortAudio is reinitialized. Retry
+    once after a reinit so a long-running server heals itself.
+    """
+    try:
+        return AudioIO(loop).__enter__()
+    except sd.PortAudioError:
+        log.warning("PortAudio open failed — refreshing device list and retrying")
+        sd._terminate()
+        sd._initialize()
+        return AudioIO(loop).__enter__()
+
+
 class AudioIO:
     def __init__(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
