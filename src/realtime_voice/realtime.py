@@ -44,10 +44,16 @@ class _State:
         self.speech_started = asyncio.Event()
         self.speech_stopped = asyncio.Event()
         self.response_done = asyncio.Event()
-        self.transcript_done = asyncio.Event()
         self.errored = asyncio.Event()
-        self.transcript = ""
         self.error: dict | None = None
+        # Transcripts arrive per conversation item, and not necessarily for
+        # the utterance we care about first (an echo blip can commit and
+        # transcribe to "" before the user's real reply does). Track them by
+        # item_id and let the turn wait for the specific item that ended its
+        # listen phase.
+        self.stopped_item_id: str | None = None
+        self.transcripts: dict[str, str] = {}
+        self.transcript_event = asyncio.Event()
         # Gate for playback: deltas that trickle in after a barge-in cancel
         # (or after the turn ends) must not reach the speakers, because the
         # output stream now outlives the turn.
@@ -221,20 +227,46 @@ class RealtimeSession:
             if on_phase:
                 on_phase("listening")
             self.audio.set_mic(True)
-            if not st.speech_started.is_set():
-                if not await _wait(st, st.speech_started, listen_timeout):
-                    return {"status": "silence", "transcript": None, "barged_in": barged}
-            if not await _wait(st, st.speech_stopped, utterance_timeout):
-                return {"status": "no-transcript", "transcript": None, "barged_in": barged}
-            if not await _wait(st, st.transcript_done, 30.0):
-                return {"status": "no-transcript", "transcript": None, "barged_in": barged}
-            return {"status": "ok", "transcript": st.transcript, "barged_in": barged}
+            loop = asyncio.get_running_loop()
+            start_deadline = loop.time() + listen_timeout
+            while True:
+                if not st.speech_started.is_set():
+                    remaining = start_deadline - loop.time()
+                    if remaining <= 0 or not await _wait(st, st.speech_started, remaining):
+                        return {"status": "silence", "transcript": None, "barged_in": barged}
+                if not await _wait(st, st.speech_stopped, utterance_timeout):
+                    return {"status": "no-transcript", "transcript": None, "barged_in": barged}
+                transcript = await self._await_transcript(st, st.stopped_item_id, 30.0)
+                if transcript is None:
+                    return {"status": "no-transcript", "transcript": None, "barged_in": barged}
+                if transcript:
+                    return {"status": "ok", "transcript": transcript, "barged_in": barged}
+                # The utterance transcribed to nothing — usually an echo blip
+                # or a breath, not the user's reply. Re-arm and keep
+                # listening until the overall deadline.
+                log.info("empty transcript for %s — listening again", st.stopped_item_id)
+                st.speech_started.clear()
+                st.speech_stopped.clear()
         finally:
             self.audio.set_mic(False)
             if self._st is st:
                 self._st = None
 
     # -- internals ------------------------------------------------------
+
+    async def _await_transcript(
+        self, st: _State, item_id: str | None, timeout: float
+    ) -> str | None:
+        """Wait for the transcription of a specific item; None on timeout."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while True:
+            if item_id in st.transcripts:
+                return st.transcripts[item_id]
+            remaining = deadline - loop.time()
+            if remaining <= 0 or not await _wait(st, st.transcript_event, remaining):
+                return None
+            st.transcript_event.clear()
 
     async def _send(self, payload: dict) -> None:
         try:
@@ -256,12 +288,17 @@ class RealtimeSession:
                 elif etype == "input_audio_buffer.speech_started":
                     st.speech_started.set()
                 elif etype == "input_audio_buffer.speech_stopped":
+                    st.stopped_item_id = ev.get("item_id")
                     st.speech_stopped.set()
                 elif etype == "conversation.item.input_audio_transcription.completed":
-                    piece = (ev.get("transcript") or "").strip()
-                    if piece:
-                        st.transcript = f"{st.transcript} {piece}".strip()
-                    st.transcript_done.set()
+                    st.transcripts[ev.get("item_id") or ""] = (
+                        (ev.get("transcript") or "").strip()
+                    )
+                    st.transcript_event.set()
+                elif etype == "conversation.item.input_audio_transcription.failed":
+                    log.warning("transcription failed: %s", ev.get("error"))
+                    st.transcripts[ev.get("item_id") or ""] = ""
+                    st.transcript_event.set()
                 elif etype == "response.done":
                     st.response_done.set()
                 elif etype == "error":
