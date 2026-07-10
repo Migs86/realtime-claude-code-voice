@@ -80,21 +80,25 @@ self-interrupt. Fixes, best first:
 | `REALTIME_VOICE_TRANSCRIBE_MODEL` | `gpt-4o-mini-transcribe` | Input transcription model. |
 | `REALTIME_VOICE_BARGE_IN` | `1` | `0` = mic muted during playback. |
 | `REALTIME_VOICE_SILENCE_MS` | `600` | Trailing silence that ends your turn. Lower = snappier, but can clip mid-sentence pauses. |
+| `REALTIME_VOICE_IDLE_S` | `300` | Close the kept-alive connection after this much idle time. |
 | `REALTIME_VOICE_LOG` | `INFO` | Log level (stderr). |
 
 ## Cost
 
 Realtime API bills per audio token, roughly per minute of speech.
 `gpt-realtime-mini` is on the order of a few cents per conversational minute;
-`gpt-realtime` about 3x that. Each `converse` call opens a fresh short
-session, so idle time costs nothing.
+`gpt-realtime` about 3x that. The connection is kept open between turns for
+latency, but idle time costs nothing (billing is per audio token, not per
+connection), and every response is out-of-band (`conversation: "none"`) so
+no history accumulates. The connection closes after
+`REALTIME_VOICE_IDLE_S` of silence or when another session wants the slot.
 
 ## Layout
 
 ```
 src/realtime_voice/
-  server.py     # MCP tools: converse, voice_status
-  realtime.py   # Realtime API turn: speak verbatim, barge-in, transcribe
+  server.py     # MCP tools: converse, voice_status; persistent session cache
+  realtime.py   # RealtimeSession: speak verbatim, barge-in, transcribe
   audio.py      # mic/speaker I/O (PortAudio, 24 kHz PCM16)
   slot.py       # machine-wide audio slot lock + waiter queue
   iterm.py      # iTerm2 tab focus + macOS notifications
@@ -102,10 +106,8 @@ src/realtime_voice/
 scripts/voice_check.py  # standalone smoke test
 ```
 
-## Known limitations (v1)
+## Known limitations
 
-- A new WebSocket per `converse` call (~300 ms setup). A persistent session
-  would shave latency; not done yet for simplicity.
 - Long pauses mid-sentence (> `SILENCE_MS`) end your turn early — raise
   `REALTIME_VOICE_SILENCE_MS` if it cuts you off.
 - Queueing is unfair-ish under heavy contention (lock, not a strict FIFO).

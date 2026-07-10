@@ -20,7 +20,7 @@ from mcp.server.fastmcp import FastMCP
 from . import config
 from .audio import AudioIO
 from .iterm import focus_terminal, iterm_session_uuid, notify
-from .realtime import RealtimeError, run_turn
+from .realtime import RealtimeError, RealtimeSession
 from .slot import AudioSlot, SlotBusy, holder_info, waiter_infos
 
 logging.basicConfig(
@@ -35,6 +35,63 @@ log = logging.getLogger(__name__)
 PROJECT = Path.cwd().name or "claude"
 
 mcp = FastMCP("realtime-voice")
+
+# Persistent voice plumbing: the WebSocket to OpenAI and the PortAudio
+# streams stay open across converse calls, so repeat turns skip the
+# connection + device setup entirely. Torn down when idle or when another
+# session is waiting for the audio slot.
+_audio: AudioIO | None = None
+_session: RealtimeSession | None = None
+_session_lock = asyncio.Lock()
+_idle_task: asyncio.Task | None = None
+
+
+async def _get_session(voice: str) -> RealtimeSession:
+    """Return the live session, (re)creating it if absent or misconfigured."""
+    global _audio, _session
+    if _audio is None:
+        _audio = AudioIO(asyncio.get_running_loop()).__enter__()
+    if _session is not None and not _session.matches(
+        voice=voice, model=config.MODEL, silence_ms=config.SILENCE_MS
+    ):
+        await _session.close()
+        _session = None
+    if _session is None:
+        _session = RealtimeSession(
+            _audio, voice=voice, model=config.MODEL, silence_ms=config.SILENCE_MS
+        )
+    return _session
+
+
+async def _teardown() -> None:
+    """Close the Realtime connection and release the audio devices."""
+    global _audio, _session
+    if _session is not None:
+        await _session.close()
+        _session = None
+    if _audio is not None:
+        _audio.__exit__(None, None, None)
+        _audio = None
+
+
+def _cancel_idle_close() -> None:
+    global _idle_task
+    if _idle_task is not None:
+        _idle_task.cancel()
+        _idle_task = None
+
+
+def _schedule_idle_close() -> None:
+    _cancel_idle_close()
+
+    async def _close_after_idle() -> None:
+        await asyncio.sleep(config.IDLE_S)
+        async with _session_lock:
+            log.info("voice idle for %ss — closing session", config.IDLE_S)
+            await _teardown()
+
+    global _idle_task
+    _idle_task = asyncio.create_task(_close_after_idle())
 
 
 @mcp.tool()
@@ -106,18 +163,27 @@ async def converse(
                 "this session waited for the voice slot; the user's iTerm2 tab "
                 "was focused and the hand-off was announced out loud"
             )
-        loop = asyncio.get_running_loop()
-        with AudioIO(loop) as audio:
-            result = await run_turn(
-                audio,
-                message=text,
-                listen=listen,
-                barge_in=effective_barge_in,
-                voice=voice or config.VOICE,
-                model=config.MODEL,
-                listen_timeout=listen_timeout,
-                silence_ms=config.SILENCE_MS,
-            )
+        async with _session_lock:
+            _cancel_idle_close()
+            session = await _get_session(voice or config.VOICE)
+            try:
+                result = await session.run_turn(
+                    message=text,
+                    listen=listen,
+                    barge_in=effective_barge_in,
+                    listen_timeout=listen_timeout,
+                )
+            except RealtimeError:
+                # The kept-alive WebSocket may have died while idle;
+                # reconnect once and retry the turn.
+                log.info("realtime turn failed — reconnecting once")
+                await session.close()
+                result = await session.run_turn(
+                    message=text,
+                    listen=listen,
+                    barge_in=effective_barge_in,
+                    listen_timeout=listen_timeout,
+                )
     except RealtimeError as e:
         return f"[error] Realtime API: {e}"
     except Exception as e:
@@ -126,10 +192,16 @@ async def converse(
     finally:
         still_waiting = slot.release()
         if still_waiting:
+            # Hand off cleanly: free the mic/speakers for the next session.
+            async with _session_lock:
+                _cancel_idle_close()
+                await _teardown()
             notes.append(
                 f"session(s) {', '.join(repr(w) for w in still_waiting)} are "
                 f"waiting for voice — wrap up this voice conversation soon"
             )
+        else:
+            _schedule_idle_close()
 
     parts: list[str] = []
     if result.get("barged_in"):
@@ -170,9 +242,13 @@ async def voice_status() -> str:
             "waiting: " + ", ".join(f"'{w.get('label', '?')}'" for w in waiters)
         )
     lines.append(
+        "realtime connection: "
+        + ("open (kept alive between turns)" if _session is not None and _session.connected else "closed")
+    )
+    lines.append(
         f"config: model={config.MODEL} voice={config.VOICE} "
         f"barge_in={'on' if config.BARGE_IN else 'off'} "
-        f"silence_ms={config.SILENCE_MS} "
+        f"silence_ms={config.SILENCE_MS} idle_close_s={config.IDLE_S} "
         f"api_key={'set' if config.api_key() else 'MISSING'}"
     )
     return "\n".join(lines)
