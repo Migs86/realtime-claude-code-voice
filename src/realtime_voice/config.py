@@ -49,7 +49,8 @@ TRANSCRIBE_MODEL = os.environ.get("REALTIME_VOICE_TRANSCRIBE_MODEL", "gpt-4o-min
 # use headphones or set REALTIME_VOICE_BARGE_IN=0 for half-duplex.
 BARGE_IN = _flag("REALTIME_VOICE_BARGE_IN", True)
 
-# How much trailing silence ends the user's turn.
-SILENCE_MS = int(os.environ.get("REALTIME_VOICE_SILENCE_MS", "900"))
+# How much trailing silence ends the user's turn. Lower feels snappier but
+# can clip natural mid-sentence pauses; raise it if it cuts you off.
+SILENCE_MS = int(os.environ.get("REALTIME_VOICE_SILENCE_MS", "600"))
 
 SAMPLE_RATE = 24000

@@ -79,7 +79,7 @@ self-interrupt. Fixes, best first:
 | `REALTIME_VOICE_VOICE` | `marin` | Voice (`marin`, `cedar`, `alloy`, …). |
 | `REALTIME_VOICE_TRANSCRIBE_MODEL` | `gpt-4o-mini-transcribe` | Input transcription model. |
 | `REALTIME_VOICE_BARGE_IN` | `1` | `0` = mic muted during playback. |
-| `REALTIME_VOICE_SILENCE_MS` | `900` | Trailing silence that ends your turn. |
+| `REALTIME_VOICE_SILENCE_MS` | `600` | Trailing silence that ends your turn. Lower = snappier, but can clip mid-sentence pauses. |
 | `REALTIME_VOICE_LOG` | `INFO` | Log level (stderr). |
 
 ## Cost

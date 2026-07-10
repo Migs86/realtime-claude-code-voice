@@ -170,8 +170,11 @@ async def run_turn(
         barged = False
         try:
             await ws.send(json.dumps(_session_update(voice, silence_ms)))
-            if not await _wait(st, st.session_ready, 10.0):
-                raise RealtimeError("session.update was not acknowledged")
+            # Don't block on the session.updated ack. The API applies events in
+            # order, so a response.create / mic append sent right after is still
+            # processed against the updated session — this saves a full
+            # round-trip before the first audio. A bad session config still
+            # surfaces as an error event, which every _wait below races against.
 
             if message:
                 # Hot mic during playback only when barge-in is wanted.

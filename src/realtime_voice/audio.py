@@ -15,7 +15,7 @@ from .config import SAMPLE_RATE
 
 log = logging.getLogger(__name__)
 
-BLOCK_FRAMES = 2400  # 100 ms per block
+BLOCK_FRAMES = 480  # 20 ms per block — tight mic->VAD and playback latency
 BYTES_PER_FRAME = 2  # int16 mono
 
 
@@ -83,9 +83,9 @@ class AudioIO:
 
     async def drain_playback(self) -> None:
         while self.playing():
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.01)
         # let the final block clear the DAC
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(0.06)
 
     def _on_output(self, outdata, frames, time_info, status) -> None:
         need = frames * BYTES_PER_FRAME
