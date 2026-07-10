@@ -1,21 +1,28 @@
 #!/bin/bash
-# Global push-to-talk: focus the last-active iTerm2 window and ask the
-# Claude Code session in it to start a realtime voice conversation.
+# Global push-to-talk, speak-first: press the hotkey, hear a beep, and just
+# talk. Your words are transcribed and typed into the Claude Code session
+# in the last-active iTerm2 window, submitted as your message.
 #
-# Works mid-task: the text is typed into the session and submitted, and
-# Claude Code queues messages that arrive while it's working, so voice
-# starts at the next opportunity.
+# Works mid-task: Claude Code queues messages that arrive while it's
+# working, so your spoken instruction lands as steering.
 #
-# Bind this to a key combo with the macOS Shortcuts app:
-#   Shortcuts -> new shortcut -> "Run Shell Script" action -> this script
-#   -> shortcut Details -> Add Keyboard Shortcut (e.g. ctrl-option-V).
+# Bind this to a key combo with the macOS Shortcuts app or a Quick Action
+# (install.sh sets up "Claude Voice Push-to-Talk" on ctrl-option-V).
 #
-# Optional argument: the message to send (defaults to starting voice).
-# Plain text is used instead of the /voice command on purpose — typed
-# slash commands open an autocomplete menu in the TUI, which can swallow
-# the Enter keypress; plain text always submits cleanly.
+# With an argument, skips the mic and types that text instead.
 
-MSG="${1:-talk to me using realtime voice}"
+set -uo pipefail
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+PY="$REPO/.venv/bin/python"
+
+if [ $# -gt 0 ]; then
+  MSG="$*"
+else
+  # Bring the target terminal forward while the mic warms up.
+  osascript -e 'tell application "iTerm2" to activate' >/dev/null 2>&1 &
+  MSG=$("$PY" "$REPO/scripts/voice_capture.py") || exit 0
+  MSG="🎙 $MSG (spoken aloud via the voice hotkey — reply with realtime voice)"
+fi
 
 exec osascript - "$MSG" <<'EOF'
 on run argv

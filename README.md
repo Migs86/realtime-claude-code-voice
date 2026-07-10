@@ -61,12 +61,18 @@ Code session, type `/voice` (optionally `/voice <topic>`) — or just say
   tells Claude another session is waiting so it can wrap up.
 - `voice_status` shows the holder, the queue, and config.
 
-## Push-to-talk hotkey (global)
+## Push-to-talk hotkey (global, speak-first)
 
-`scripts/voice-hotkey.sh` focuses your **last-active iTerm2 window** and
-types a voice request into the Claude Code session there, then submits it.
-Claude Code queues messages that arrive mid-task, so this works even while
-Claude is busy — voice starts at the next opportunity.
+`scripts/voice-hotkey.sh`: press the key combo anywhere, hear a **beep**,
+and just talk. Your words are transcribed and typed into the Claude Code
+session in your **last-active iTerm2 window**, submitted as your message
+(with a nudge to reply by voice). The mic is hot from the first instant —
+audio buffers locally while the connection sets up, so you don't have to
+wait for the beep. Claude Code queues messages that arrive mid-task, so
+this works while Claude is busy.
+
+If the audio slot is busy or nothing is heard within 15 s, you get a macOS
+notification instead. Pass an argument to skip the mic and type that text.
 
 Bind it to a key combo with the macOS Shortcuts app:
 
@@ -75,8 +81,9 @@ Bind it to a key combo with the macOS Shortcuts app:
 3. In the shortcut's **Details** pane → **Add Keyboard Shortcut** → press
    your combo (e.g. ⌃⌥V).
 
-Now that combo works from any app, hands-free into the last terminal you
-used. Pass an argument to send a different message.
+(Or create a Quick Action in `~/Library/Services` and register the combo
+via `defaults write pbs NSServicesStatus` — same effect without the
+Shortcuts app.)
 
 ## Status line indicator
 

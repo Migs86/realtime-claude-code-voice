@@ -122,6 +122,7 @@ class RealtimeSession:
         self._recv_task: asyncio.Task | None = None
         self._send_task: asyncio.Task | None = None
         self._st: _State | None = None
+        self._first_turn = True
 
     @property
     def connected(self) -> bool:
@@ -158,6 +159,7 @@ class RealtimeSession:
         await self._ws.send(json.dumps(_session_update(self.voice, self.silence_ms)))
         self._recv_task = asyncio.create_task(self._receiver())
         self._send_task = asyncio.create_task(self._mic_sender())
+        self._first_turn = True
 
     async def close(self) -> None:
         for t in (self._recv_task, self._send_task):
@@ -196,9 +198,14 @@ class RealtimeSession:
         st = self._st = _State()
         barged = False
         try:
-            # Start from a clean input buffer so uncommitted audio from a
-            # previous turn can't leak into this one.
-            await self._send({"type": "input_audio_buffer.clear"})
+            # On a reused connection, start from a clean input buffer so
+            # uncommitted audio from a previous turn can't leak into this
+            # one. Never on the first turn: capture-first callers hot-mic
+            # before connecting, and a clear would race ahead of (and drop)
+            # those buffered opening words.
+            if not self._first_turn:
+                await self._send({"type": "input_audio_buffer.clear"})
+            self._first_turn = False
 
             if message:
                 self.audio.clear_playback()
