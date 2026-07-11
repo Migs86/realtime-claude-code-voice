@@ -14,13 +14,26 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 PY="$REPO/.venv/bin/python"
+LOG="$HOME/.realtime-voice/hotkey.log"
+mkdir -p "$HOME/.realtime-voice"
 
 if [ $# -gt 0 ]; then
   MSG="$*"
 else
   # Bring the target terminal forward while the mic warms up.
   osascript -e 'tell application "iTerm2" to activate' >/dev/null 2>&1 &
-  MSG=$("$PY" "$REPO/scripts/voice_capture.py") || exit 0
+  echo "--- $(date) capture start (parent: $(ps -o comm= -p $PPID 2>/dev/null))" >> "$LOG"
+  MSG=$("$PY" "$REPO/scripts/voice_capture.py" 2>>"$LOG")
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    # rc 1 = handled (busy/silence — voice_capture already notified).
+    # Anything else = it died (e.g. mic permission denied for the invoking
+    # app); that would otherwise be invisible, so say so.
+    if [ $rc -ge 2 ]; then
+      osascript -e 'display notification "Voice capture failed — see ~/.realtime-voice/hotkey.log" with title "Claude voice"' >/dev/null 2>&1
+    fi
+    exit 0
+  fi
   MSG="🎙 $MSG (spoken aloud via the voice hotkey — reply with realtime voice)"
 fi
 

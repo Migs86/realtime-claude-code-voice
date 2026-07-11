@@ -78,4 +78,10 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    try:
+        sys.exit(asyncio.run(main()))
+    except Exception:
+        # Exit 2 = crashed (vs 1 = handled busy/silence): the hotkey
+        # script uses this to decide whether a notification is still owed.
+        logging.getLogger(__name__).exception("voice capture crashed")
+        sys.exit(2)

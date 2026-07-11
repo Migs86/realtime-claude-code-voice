@@ -74,16 +74,28 @@ this works while Claude is busy.
 If the audio slot is busy or nothing is heard within 15 s, you get a macOS
 notification instead. Pass an argument to skip the mic and type that text.
 
-Bind it to a key combo with the macOS Shortcuts app:
+**As a button (most reliable):** build a tiny app and pin it to the Dock —
+one click starts listening:
+
+```bash
+osacompile -o ~/Applications/"Claude Voice.app" -e \
+  'do shell script "/path/to/realtime-claude-code-voice/scripts/voice-hotkey.sh"'
+```
+
+First click prompts for Microphone and iTerm2 Automation permissions.
+
+**As a key combo (macOS Shortcuts):**
 
 1. Shortcuts → **+** → add a **Run Shell Script** action.
 2. Script: `/path/to/realtime-claude-code-voice/scripts/voice-hotkey.sh`
 3. In the shortcut's **Details** pane → **Add Keyboard Shortcut** → press
    your combo (e.g. ⌃⌥V).
+4. **Important:** grant Shortcuts microphone access (System Settings →
+   Privacy & Security → Microphone → Shortcuts), or the capture dies
+   silently and nothing happens.
 
-(Or create a Quick Action in `~/Library/Services` and register the combo
-via `defaults write pbs NSServicesStatus` — same effect without the
-Shortcuts app.)
+Failures are logged to `~/.realtime-voice/hotkey.log`, and a crashed
+capture posts a macOS notification instead of failing silently.
 
 ## Status line indicator
 
